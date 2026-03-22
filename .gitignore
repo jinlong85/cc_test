@@ -1,0 +1,33 @@
+# Node
+node_modules/
+package-lock.json
+
+# Chrome/115 Browser - 重要！不要同步浏览器数据
+AppData/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+
+# 私人照片和视频 - 不要上传
+weibo_photos/
+weibo_photos/*
+
+# 嵌套的 Git 仓库（它们有自己的仓库）
+claude-skills/
+everything-claude-code/
+
+# Python cache
+__pycache__/
+*.pyc
