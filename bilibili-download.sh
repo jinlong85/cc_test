@@ -23,80 +23,60 @@ echo "URL: $URL"
 echo "质量: $QUALITY"
 echo "=========================================="
 
-# FFmpeg路径
-FFMPEG="C:/Users/JINLONG/Downloads/ffmpeg-8.1-full_build/bin/ffmpeg.exe"
-YTDLP="C:/Users/JINLONG/AppData/Local/Programs/Python/Python314/Scripts/yt-dlp.exe"
+# 通过cmd.exe执行yt-dlp
+get_title() {
+    cmd.exe /c "C:\\Users\\JINLONG\\AppData\\Local\\Programs\\Python\\Python314\\Scripts\\yt-dlp.exe --get-title --no-playlist \"$URL\"" 2>/dev/null | head -1
+}
 
-# 质量格式映射
-case "$QUALITY" in
-    8k|4k|1080p|720p|480p|360p)
-        FORMAT="bestvideo[height<=$QUALITY]+bestaudio/best[height<=$QUALITY]"
-        ;;
-    best)
-        FORMAT="bestvideo+bestaudio/best"
-        ;;
-    *)
-        FORMAT="bestvideo+bestaudio/best"
-        ;;
-esac
+download_video() {
+    cmd.exe /c "C:\\Users\\JINLONG\\AppData\\Local\\Programs\\Python\\Python314\\Scripts\\yt-dlp.exe -f \"bestvideo[ext=mp4]\" --output \"C:\\Users\\JINLONG\\Downloads\\_video_temp.mp4\" --no-playlist --no-warnings \"$URL\"" 2>&1 || true
+}
 
-# 下载目录
-DOWNLOAD_DIR="C:/Users/JINLONG/Downloads"
+download_audio() {
+    cmd.exe /c "C:\\Users\\JINLONG\\AppData\\Local\\Programs\\Python\\Python314\\Scripts\\yt-dlp.exe -f \"bestaudio[ext=m4a]\" --output \"C:\\Users\\JINLONG\\Downloads\\_audio_temp.m4a\" --no-playlist --no-warnings \"$URL\"" 2>&1 || true
+}
 
-# 临时文件
-VIDEO_FILE="$DOWNLOAD_DIR/_video_temp.mp4"
-AUDIO_FILE="$DOWNLOAD_DIR/_audio_temp.m4a"
+merge_video() {
+    cmd.exe /c "C:\\Users\\JINLONG\\Downloads\\ffmpeg-8.1-full_build\\bin\\ffmpeg.exe -hide_banner -loglevel error -i \"C:\\Users\\JINLONG\\Downloads\\_video_temp.mp4\" -i \"C:\\Users\\JINLONG\\Downloads\\_audio_temp.m4a\" -c copy -y \"$OUTPUT_FILE\"" 2>&1
+}
+
+cleanup() {
+    cmd.exe /c "del /f \"C:\\Users\\JINLONG\\Downloads\\_video_temp.mp4\" \"C:\\Users\\JINLONG\\Downloads\\_audio_temp.m4a\" 2>nul" 2>/dev/null || true
+}
 
 echo "获取视频信息..."
-# 获取标题
-TITLE=$("$YTDLP" --get-title --no-playlist "$URL" 2>/dev/null | head -1)
+TITLE=$(get_title)
 echo "标题: $TITLE"
 
 # 清理标题中的非法字符 (Windows文件名)
 CLEAN_TITLE=$(echo "$TITLE" | sed 's/[\\/:*?"<>|]/_/g')
 
-# 输出文件
-OUTPUT_FILE="$DOWNLOAD_DIR/${CLEAN_TITLE}.mp4"
+# 输出文件 (使用Windows路径格式)
+OUTPUT_FILE="C:\\Users\\JINLONG\\Downloads\\${CLEAN_TITLE}.mp4"
 
 echo "开始下载..."
-
-# 下载视频（分离格式）
-"$YTDLP" \
-    -f "bestvideo[ext=mp4]" \
-    --output "$VIDEO_FILE" \
-    --no-playlist \
-    --no-warnings \
-    "$URL" 2>&1 || true
-
-# 下载音频
-"$YTDLP" \
-    -f "bestaudio[ext=m4a]" \
-    --output "$AUDIO_FILE" \
-    --no-playlist \
-    --no-warnings \
-    "$URL" 2>&1 || true
+download_video
+download_audio
 
 # 检查文件是否存在
-if [ ! -f "$VIDEO_FILE" ] || [ ! -f "$AUDIO_FILE" ]; then
+VIDEO_EXISTS=$(cmd.exe /c "if exist \"C:\\Users\\JINLONG\\Downloads\\_video_temp.mp4\" (echo yes) else (echo no)" 2>/dev/null)
+AUDIO_EXISTS=$(cmd.exe /c "if exist \"C:\\Users\\JINLONG\\Downloads\\_audio_temp.m4a\" (echo yes) else (echo no)" 2>/dev/null)
+
+if [ "$VIDEO_EXISTS" != "yes" ] || [ "$AUDIO_EXISTS" != "yes" ]; then
     echo "错误: 下载失败"
+    cleanup
     exit 1
 fi
 
 echo "视频和音频下载完成，开始合并..."
-
-# 合并视频和音频
-"$FFMPEG" -hide_banner -loglevel error \
-    -i "$VIDEO_FILE" \
-    -i "$AUDIO_FILE" \
-    -c copy \
-    -y "$OUTPUT_FILE"
+merge_video
 
 # 删除临时文件
-rm -f "$VIDEO_FILE" "$AUDIO_FILE"
+cleanup
 
 echo ""
 echo "=========================================="
 echo "  下载完成！"
 echo "=========================================="
 echo "文件: $OUTPUT_FILE"
-ls -lh "$OUTPUT_FILE"
+cmd.exe /c "dir \"$OUTPUT_FILE\"" 2>/dev/null | grep -E "mp4|字节|bytes"
