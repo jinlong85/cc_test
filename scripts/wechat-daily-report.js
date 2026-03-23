@@ -152,7 +152,7 @@ async function readFileContent(filePath) {
 }
 
 /**
- * 提取工作重点（完整解析日报内容，不精简）
+ * 提取工作重点（严格按板块分隔）
  */
 function extractKeyPoints(content) {
   if (!content) return { sections: [], stats: {}, header: {} };
@@ -168,93 +168,105 @@ function extractKeyPoints(content) {
 
   const sections = [];
 
-  // ==================== 施工板块 ====================
-  const constructionSection = extractConstructionSection(content);
-  if (constructionSection.items.length > 0 || constructionSection.rawText) {
-    sections.push(constructionSection);
+  // 找到各板块的起始位置
+  const sectionMarkers = {
+    construction: content.search(/一、各板块完成情况|一、施工板块/),
+    tech: content.search(/二、技术板块|二、方案/),
+    env: content.search(/二、环水保专项|三、环水保/),
+    issue: content.search(/三、需协调|四、需协调/)
+  };
+
+  // 提取施工板块（一、二之间）
+  if (sectionMarkers.construction !== -1) {
+    const start = sectionMarkers.construction;
+    const end = sectionMarkers.tech !== -1 ? sectionMarkers.tech : sectionMarkers.env !== -1 ? sectionMarkers.env : content.length;
+    const sectionContent = content.slice(start, end);
+    const constructionSection = extractConstructionSection(sectionContent);
+    if (constructionSection.items.length > 0) {
+      sections.push(constructionSection);
+    }
   }
 
-  // ==================== 技术板块 ====================
-  const techSection = extractTechSection(content);
-  if (techSection.items.length > 0) {
-    sections.push(techSection);
+  // 提取技术板块（二、三之间）
+  if (sectionMarkers.tech !== -1) {
+    const start = sectionMarkers.tech;
+    const end = sectionMarkers.env !== -1 ? sectionMarkers.env : sectionMarkers.issue !== -1 ? sectionMarkers.issue : content.length;
+    const sectionContent = content.slice(start, end);
+    const techSection = extractTechSection(sectionContent);
+    if (techSection.items.length > 0) {
+      sections.push(techSection);
+    }
   }
 
-  // ==================== 环水保工作 ====================
-  const envSection = extractEnvSection(content);
-  if (envSection.items.length > 0) {
-    sections.push(envSection);
+  // 提取环水保板块
+  if (sectionMarkers.env !== -1) {
+    const start = sectionMarkers.env;
+    const end = sectionMarkers.issue !== -1 ? sectionMarkers.issue : content.length;
+    const sectionContent = content.slice(start, end);
+    const envSection = extractEnvSection(sectionContent);
+    if (envSection.items.length > 0) {
+      sections.push(envSection);
+    }
   }
 
-  // ==================== 需协调事项 ====================
+  // 提取需协调事项
   const issueSection = extractIssueSection(content);
   sections.push(issueSection);
 
-  // ==================== 统计数据 ====================
+  // 统计数据
+  const techSection = sections.find(s => s.type === 'tech');
   const stats = {
     hasIssues: issueSection.items.length > 0 && issueSection.items[0].status !== '✓ 正常',
     sectionsCount: sections.length,
-    planTotal: techSection.totalCount || 0,
-    planApproved: techSection.approvedCount || 0,
-    planPending: techSection.pendingCount || 0
+    planTotal: techSection ? techSection.totalCount : 0,
+    planApproved: techSection ? techSection.approvedCount : 0,
+    planPending: techSection ? techSection.pendingCount : 0
   };
 
   return { sections, stats, header };
 }
 
 /**
- * 提取施工板块 - 完整内容
+ * 提取施工板块
  */
-function extractConstructionSection(content) {
+function extractConstructionSection(sectionContent) {
   const items = [];
 
-  // 提取炸药库施工完整段落
-  if (content.includes('炸药库施工')) {
-    const match = content.match(/炸药库施工情况([\s\S]*?)(?=2、|二、|三、|$)/);
-    if (match) {
-      const text = match[1].replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
-      items.push({
-        name: '炸药库施工',
-        content: text,
-        progress: '进行中'
-      });
-    }
+  // 炸药库施工
+  const explosivesMatch = sectionContent.match(/1、炸药库施工情况\s*([\s\S]*?)(?=2、|表2|$)/);
+  if (explosivesMatch) {
+    const text = explosivesMatch[1].replace(/\s+/g, ' ').trim();
+    // 提取序号和内容
+    const cleanText = text.replace(/序号|施工项目|今日实际完成|累计完成|计划完成时间及剩余工程量|计划偏差及纠偏措施/g, ' ');
+    items.push({
+      name: '炸药库施工',
+      content: cleanText,
+      progress: '进行中'
+    });
   }
 
-  // 提取首开区营地完整段落
-  if (content.includes('首开区营地')) {
-    const match = content.match(/首开区营地施工情况([\s\S]*?)(?=3、|迎检外业|二、|$)/);
-    if (match) {
-      let text = match[1].replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
-      // 包含资源投入
-      const resourceMatch = text.match(/资源投入情况[：:]([^"]+?)(?=资源投入|$)/);
-      if (resourceMatch) {
-        text += ' [资源投入: ' + resourceMatch[1].trim() + ']';
-      }
-      items.push({
-        name: '首开区营地施工',
-        content: text,
-        progress: '进行中'
-      });
-    }
+  // 首开区营地
+  const campMatch = sectionContent.match(/2、首开区营地施工情况\s*([\s\S]*?)(?=3、|表3|$)/);
+  if (campMatch) {
+    const text = campMatch[1].replace(/\s+/g, ' ').trim();
+    const cleanText = text.replace(/序号|施工项目|今日实际完成|累计完成|计划完成时间及剩余工程量|计划偏差及纠偏措施|资源投入情况/g, ' ');
+    items.push({
+      name: '首开区营地施工',
+      content: cleanText,
+      progress: '进行中'
+    });
   }
 
-  // 提取迎检外业完整段落
-  if (content.includes('迎检外业工作情况')) {
-    const match = content.match(/迎检外业工作情况([\s\S]*?)(?=二、|三、|四、|$)/);
-    if (match) {
-      let text = match[1].replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
-      const resourceMatch = text.match(/资源投入情况[：:]([^"]+?)$/);
-      if (resourceMatch) {
-        text = text.replace(/资源投入情况[：:][^"]+?$/, '').trim();
-        text += ' [资源投入: ' + resourceMatch[1].trim() + ']';
-      }
-      items.push({
-        name: '迎检外业工作情况',
-        content: text,
-        progress: '进行中'
-      });
-    }
+  // 迎检外业
+  const inspectionMatch = sectionContent.match(/3、迎检外业工作情况\s*([\s\S]*?)$/);
+  if (inspectionMatch) {
+    const text = inspectionMatch[1].replace(/\s+/g, ' ').trim();
+    const cleanText = text.replace(/序号|施工项目|今日实际完成|累计完成|计划完成时间及剩余工程量|计划偏差及纠偏措施|资源投入情况/g, ' ');
+    items.push({
+      name: '迎检外业工作情况',
+      content: cleanText,
+      progress: '进行中'
+    });
   }
 
   return {
@@ -265,88 +277,81 @@ function extractConstructionSection(content) {
 }
 
 /**
- * 提取技术板块（施工方案）- 完整清单
+ * 提取技术板块（施工方案）- 表格结构正确解析
  */
-function extractTechSection(content) {
+function extractTechSection(sectionContent) {
   const items = [];
 
-  // 提取施工方案清单表格区域
-  const techMatch = content.match(/施工方案清单([\s\S]*?)(?=二、环水保|三、需协调|施工形象|$)/);
-  if (techMatch) {
-    const tableText = techMatch[1];
-
-    // 按行分析，提取序号、方案名、类型、计划时间、状态
-    const lines = tableText.split('\n').filter(l => l.trim());
-
-    let currentItem = null;
-    let currentText = '';
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-
-      // 匹配序号行 (1, 2, 3...)
-      const numMatch = trimmed.match(/^(\d+)\s*$/);
-      if (numMatch) {
-        if (currentItem) items.push(currentItem);
-        currentItem = { num: numMatch[1], name: '', type: '', planDate: '', status: '', statusType: 'pending' };
-        currentText = '';
-        continue;
-      }
-
-      // 如果有当前item，累加文本
-      if (currentItem) {
-        currentText += ' ' + trimmed;
-
-        // 判断状态
-        if (trimmed.includes('已批复')) {
-          currentItem.status = '已批复';
-          currentItem.statusType = 'completed';
-        } else if (trimmed.includes('已完成')) {
-          currentItem.status = '已完成';
-          currentItem.statusType = 'completed';
-        } else if (trimmed.includes('监理审批中') || trimmed.includes('审批中')) {
-          currentItem.status = '监理审批中';
-          currentItem.statusType = 'progress';
-        } else if (trimmed.includes('编制中')) {
-          currentItem.status = '编制中';
-          currentItem.statusType = 'pending';
-        } else if (trimmed.includes('修改中')) {
-          currentItem.status = '修改中';
-          currentItem.statusType = 'pending';
-        } else if (trimmed.includes('已提交')) {
-          currentItem.status = '已提交';
-          currentItem.statusType = 'progress';
-        }
-
-        // 判断类型
-        if (trimmed.includes('重大')) currentItem.type = '重大';
-        else if (trimmed.includes('超危大')) currentItem.type = '超危大';
-        else if (trimmed.includes('危大')) currentItem.type = '危大';
-        else if (trimmed.includes('一般')) currentItem.type = '一般';
-      }
-    }
-    if (currentItem) items.push(currentItem);
+  // 提取表格区域（从"施工方案清单"到"环水保"或"需协调"）
+  const tableMatch = sectionContent.match(/施工方案清单([\s\S]*?)(?=环水保|需协调|三、|四、)/);
+  if (!tableMatch) {
+    // 尝试直接匹配方案
+    return extractTechSectionSimple(sectionContent);
   }
 
-  // 如果没找到表格，用简单方式提取
-  if (items.length === 0) {
-    const planMatches = content.matchAll(/(\d+)\s+([^\n]+?)\s*\n([^\n]*?)\s*\n(重大|超危大|危大|一般)?[^\n]*\s*\n([^\n]+?)\s*\n([^\n]+)/g);
-    for (const match of planMatches) {
-      const status = match[6] || match[5];
-      let statusType = 'pending';
-      if (status.includes('已批复') || status.includes('已完成')) statusType = 'completed';
-      else if (status.includes('审批中') || status.includes('已提交')) statusType = 'progress';
+  const tableText = tableMatch[1];
 
-      items.push({
-        num: match[1],
-        name: match[2].trim(),
-        type: match[4] || '',
-        planDate: match[3].trim(),
-        status: status.trim(),
-        statusType
-      });
+  // 按"序号 方案名 类型 时间 状态"列结构解析
+  // 把连续文本切分成块，每块属于一个序号
+  const blocks = tableText.split(/(?:^|\n)\s*\d{1,2}\s+(?=\D)/m);
+
+  for (const block of blocks) {
+    if (!block.trim()) continue;
+
+    const lines = block.split('\n').filter(l => l.trim());
+    const firstLine = lines[0].trim();
+
+    // 匹配序号开头
+    const numMatch = firstLine.match(/^(\d{1,2})\s+(.+)/);
+    if (numMatch) {
+      const item = {
+        num: numMatch[1],
+        name: numMatch[2].replace(/\s+/g, ' ').trim(),
+        type: '',
+        planDate: '',
+        status: '',
+        statusType: 'pending'
+      };
+
+      // 收集后续行的信息
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i];
+        if (line.includes('重大')) item.type = '重大';
+        else if (line.includes('超危大')) item.type = '超危大';
+        else if (line.includes('危大')) item.type = '危大';
+        else if (line.includes('一般')) item.type = '一般';
+
+        const dateMatch = line.match(/\d{4}[-/]\d{2}[-/]\d{2}/);
+        if (dateMatch) item.planDate = dateMatch[0];
+
+        if (line.includes('已批复')) {
+          item.status = '已批复';
+          item.statusType = 'completed';
+        } else if (line.includes('已完成')) {
+          item.status = '已完成';
+          item.statusType = 'completed';
+        } else if (line.includes('监理审批中')) {
+          item.status = '监理审批中';
+          item.statusType = 'progress';
+        } else if (line.includes('编制中')) {
+          item.status = '编制中';
+          item.statusType = 'pending';
+        } else if (line.includes('修改中')) {
+          item.status = '修改中';
+          item.statusType = 'pending';
+        } else if (line.includes('已提交')) {
+          item.status = '已提交';
+          item.statusType = 'progress';
+        }
+      }
+
+      if (item.name) items.push(item);
     }
+  }
+
+  // 如果还是没提取到，用简单方式
+  if (items.length === 0) {
+    return extractTechSectionSimple(sectionContent);
   }
 
   // 统计
@@ -364,39 +369,83 @@ function extractTechSection(content) {
 }
 
 /**
- * 提取环水保工作 - 完整任务分解
+ * 简单方式提取技术板块
  */
-function extractEnvSection(content) {
+function extractTechSectionSimple(sectionContent) {
   const items = [];
 
-  // 提取环保迎检工作任务分解区域
-  if (content.includes('环保迎检工作任务分解')) {
-    const envMatch = content.match(/环保迎检工作任务分解([\s\S]*?)(?=三、需协调|施工形象|$)/);
-    if (envMatch) {
-      const envText = envMatch[1];
+  // 匹配所有方案条目：序号 + 方案名（跨多行直到下一个序号或板块结束）
+  const pattern = /(\d{1,2})\s+(卡瓦白庆[^\n]+?|20t炸药库[^\n]+?|临时用电[^\n]+?|防洪度汛[^\n]+?|通讯工程[^\n]+?|边坡[^\n]+?|下库[^\n]+?|勘探便道[^\n]+?|附属周转场[^\n]+?|渣料[^\n]+?|PDB\d+#?[^\n]+?)\s*\n?([^\n]*?)\s*\n?([^\n]*)/g;
 
-      // 按年份+责任人分解
-      const yearBlocks = envText.split(/(202[345]\d(?=龙军飞|刘金平|涂超|易雷))/g);
+  let match;
+  while ((match = pattern.exec(sectionContent)) !== null) {
+    const num = match[1];
+    const name = match[2].trim();
+    const rest = (match[3] + ' ' + match[4]).trim();
 
-      // 提取每个责任人的任务
-      const leaderMatches = envText.matchAll(/(龙军飞|刘金平|涂超|易雷)\s+(\d{4})\s+([^\n]+?)\s+([^\n]+?)\s+((?:已完成|明日完成|进行中))/g);
+    let type = '', planDate = '', status = '', statusType = 'pending';
 
-      for (const match of leaderMatches) {
-        const leader = match[1];
-        const year = match[2];
-        const task = match[3].trim();
-        const work = match[4].trim();
-        const status = match[5];
+    if (rest.includes('重大')) type = '重大';
+    else if (rest.includes('超危大')) type = '超危大';
+    else if (rest.includes('危大')) type = '危大';
+    else if (rest.includes('一般')) type = '一般';
 
-        items.push({
-          leader,
-          year,
-          task: task + ' - ' + work,
-          status,
-          statusType: status.includes('已完成') ? 'completed' : 'pending'
-        });
-      }
+    const dateMatch = rest.match(/\d{4}[-/]\d{2}[-/]\d{2}/);
+    if (dateMatch) planDate = dateMatch[0];
+
+    if (rest.includes('已批复') || rest.includes('已完成')) {
+      status = rest.includes('已批复') ? '已批复' : '已完成';
+      statusType = 'completed';
+    } else if (rest.includes('监理审批中')) {
+      status = '监理审批中';
+      statusType = 'progress';
+    } else if (rest.includes('编制中')) {
+      status = '编制中';
+      statusType = 'pending';
+    } else if (rest.includes('修改中')) {
+      status = '修改中';
+      statusType = 'pending';
+    } else if (rest.includes('已提交')) {
+      status = '已提交';
+      statusType = 'progress';
     }
+
+    if (name) {
+      items.push({ num, name, type, planDate, status, statusType });
+    }
+  }
+
+  const approvedCount = items.filter(i => i.statusType === 'completed').length;
+  const pendingCount = items.filter(i => i.statusType !== 'completed').length;
+
+  return {
+    title: '二、技术板块（施工方案）',
+    items,
+    totalCount: items.length,
+    approvedCount,
+    pendingCount,
+    type: 'tech'
+  };
+}
+
+/**
+ * 提取环水保工作
+ */
+function extractEnvSection(sectionContent) {
+  const items = [];
+
+  // 按年份和责任人分解
+  const leaderMatches = sectionContent.matchAll(/(龙军飞|刘金平|涂超|易雷)\s+(\d{4})\s+([^\n]+?)\s+([^\n]+?)\s+(已完成|明日完成|进行中)/g);
+
+  for (const match of leaderMatches) {
+    items.push({
+      leader: match[1],
+      year: match[2],
+      task: match[3].trim(),
+      work: match[4].trim(),
+      status: match[5],
+      statusType: match[5].includes('已完成') ? 'completed' : 'pending'
+    });
   }
 
   return {
@@ -409,42 +458,29 @@ function extractEnvSection(content) {
 }
 
 /**
- * 提取需协调事项 - 完整内容
+ * 提取需协调事项
  */
 function extractIssueSection(content) {
   const items = [];
 
-  // 提取"需协调解决的事项及存在的问题"段落
-  const issueMatch = content.match(/需协调解决的事项及存在的问题[：:]*\s*([\s\S]*?)(?=四、|施工形象|图\d|$)/);
+  const issueMatch = content.match(/需协调解决的事项及存在的问题[：:]*\s*([\s\S]*?)(?=四、|施工形象|图\d|$)/i);
 
   if (issueMatch && issueMatch[1]) {
-    const text = issueMatch[1].replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
-    if (!text.includes('无') && text.length > 5) {
+    const text = issueMatch[1].replace(/\s+/g, ' ').trim();
+    if (text.length > 5 && !text.includes('无')) {
       items.push({
         name: text,
         status: '⚠️ 待解决',
         statusType: 'warning'
       });
     } else {
-      items.push({
-        name: '无',
-        status: '✓ 正常',
-        statusType: 'completed'
-      });
+      items.push({ name: '无', status: '✓ 正常', statusType: 'completed' });
     }
   } else {
-    items.push({
-      name: '无',
-      status: '✓ 正常',
-      statusType: 'completed'
-    });
+    items.push({ name: '无', status: '✓ 正常', statusType: 'completed' });
   }
 
-  return {
-    title: '四、需协调事项',
-    items,
-    type: 'issue'
-  };
+  return { title: '四、需协调事项', items, type: 'issue' };
 }
 
 /**
@@ -538,21 +574,22 @@ function generateReport(filesContent) {
   .work-item-status.progress { background: #fff3e0; color: #e65100; }
   .work-item-status.pending { background: #e3f2fd; color: #1565c0; }
   .work-item-status.warning { background: #ffebee; color: #c62828; }
-  .work-item-content { color: #555; font-size: 13px; line-height: 1.6; padding-left: 4px; }
+  .work-item-content { color: #444; font-size: 13px; line-height: 1.7; padding-left: 4px; word-wrap: break-word; overflow-wrap: break-word; white-space: normal; }
   .work-item-leader { color: #888; font-size: 12px; margin-top: 6px; }
 
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
   th { background: #f5f5f5; color: #555; font-weight: 600; text-align: left; padding: 10px 12px; border-bottom: 2px solid #e0e0e0; }
-  td { padding: 10px 12px; border-bottom: 1px solid #eee; color: #333; }
+  td { padding: 10px 12px; border-bottom: 1px solid #eee; color: #333; word-wrap: break-word; overflow-wrap: break-word; }
   tr:last-child td { border-bottom: none; }
   tr:hover { background: #f8f9fa; }
 
-  .progress-bar { width: 100%; height: 6px; background: #e0e0e0; border-radius: 3px; margin-top: 8px; }
-  .progress-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, #4caf50, #66bb6a); }
+  .progress-bar { height: 8px; background: #e0e0e0; border-radius: 4px; overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, #4caf50, #66bb6a); }
 
   .footer { text-align: center; padding: 20px; color: #999; font-size: 12px; }
   .file-list { background: #f8f9fa; padding: 16px 24px; border-radius: 8px; margin-top: 16px; }
   .file-list h4 { margin: 0 0 8px 0; color: #666; font-size: 13px; font-weight: 500; }
+  .file-list li { margin-bottom: 4px; }
   .file-list ul { margin: 0; padding-left: 20px; color: #555; font-size: 13px; }
 </style>
 </head>
@@ -626,6 +663,8 @@ function generateReport(filesContent) {
  * 构建施工板块HTML
  */
 function buildConstructionHtml(section) {
+  if (!section.items || section.items.length === 0) return '';
+
   return `
   <div class="section">
     <div class="section-header">
@@ -633,19 +672,19 @@ function buildConstructionHtml(section) {
       <div class="section-title">${section.title}</div>
     </div>
     ${section.items.map(item => `
-    <div class="work-item">
+    <div class="work-item" style="padding: 16px 20px;">
       <div class="work-item-header">
         <div class="work-item-name">${item.name}</div>
         <div class="work-item-status ${item.progress === '进行中' ? 'progress' : 'done'}">${item.progress}</div>
       </div>
-      <div class="work-item-content">${item.content || '正常施工中'}</div>
+      <div class="work-item-content" style="margin-top: 10px; line-height: 1.8;">${item.content || '正常施工中'}</div>
     </div>
     `).join('')}
   </div>`;
 }
 
 /**
- * 构建技术板块HTML
+ * 构建技术板块HTML - 完整方案清单
  */
 function buildTechHtml(section) {
   const approvedPct = section.totalCount > 0 ? Math.round(section.approvedCount / section.totalCount * 100) : 0;
@@ -655,36 +694,44 @@ function buildTechHtml(section) {
     <div class="section-header">
       <div class="section-icon tech">📝</div>
       <div class="section-title">${section.title}</div>
-      <div class="section-badge">${section.totalCount}项 / 已批复${section.approvedCount}项</div>
+      <div class="section-badge">共${section.totalCount}项 | 已批复${section.approvedCount}项 | 审批中${section.pendingCount}项</div>
     </div>
     <table>
       <thead>
         <tr>
           <th style="width:5%">#</th>
-          <th style="width:50%">方案名称</th>
-          <th style="width:20%">类型</th>
-          <th style="width:25%">状态</th>
+          <th style="width:45%">方案名称</th>
+          <th style="width:12%">类型</th>
+          <th style="width:18%">计划时间</th>
+          <th style="width:20%">状态</th>
         </tr>
       </thead>
       <tbody>
         ${section.items.map((item, idx) => `
         <tr>
-          <td>${idx + 1}</td>
-          <td>${item.name}</td>
-          <td>-</td>
+          <td>${item.num || (idx + 1)}</td>
+          <td style="font-size: 13px;">${item.name}</td>
+          <td>${item.type || '-'}</td>
+          <td>${item.planDate || '-'}</td>
           <td><span class="work-item-status ${item.statusType}">${item.status}</span></td>
         </tr>
         `).join('')}
       </tbody>
     </table>
-    <div class="progress-bar"><div class="progress-fill" style="width:${approvedPct}%"></div></div>
+    <div style="margin-top: 12px; display: flex; align-items: center; gap: 10px;">
+      <span style="font-size: 12px; color: #666;">完成进度:</span>
+      <div class="progress-bar" style="flex: 1;"><div class="progress-fill" style="width:${approvedPct}%"></div></div>
+      <span style="font-size: 12px; color: #666;">${approvedPct}%</span>
+    </div>
   </div>`;
 }
 
 /**
- * 构建环水保板块HTML
+ * 构建环水保板块HTML - 完整任务分解
  */
 function buildEnvHtml(section) {
+  if (!section.items || section.items.length === 0) return '';
+
   return `
   <div class="section">
     <div class="section-header">
@@ -692,22 +739,35 @@ function buildEnvHtml(section) {
       <div class="section-title">${section.title}</div>
       <div class="section-badge">${section.doneCount}/${section.totalCount} 完成</div>
     </div>
-    ${section.items.map(item => `
-    <div class="work-item">
-      <div class="work-item-header">
-        <div class="work-item-name">${item.name}</div>
-        <div class="work-item-status ${item.statusType}">${item.status}</div>
-      </div>
-      ${item.leader ? `<div class="work-item-leader">责任人: ${item.leader}</div>` : ''}
-    </div>
-    `).join('')}
+    <table>
+      <thead>
+        <tr>
+          <th style="width:15%">责任人</th>
+          <th style="width:10%">年份</th>
+          <th style="width:45%">工作任务</th>
+          <th style="width:30%">状态</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${section.items.map(item => `
+        <tr>
+          <td><strong>${item.leader || '-'}</strong></td>
+          <td>${item.year || '-'}</td>
+          <td style="font-size: 13px;">${item.task || '-'}</td>
+          <td><span class="work-item-status ${item.statusType}">${item.status}</span></td>
+        </tr>
+        `).join('')}
+      </tbody>
+    </table>
   </div>`;
 }
 
 /**
- * 构建问题板块HTML
+ * 构建问题板块HTML - 完整内容
  */
 function buildIssueHtml(section) {
+  if (!section.items || section.items.length === 0) return '';
+
   const item = section.items[0];
   const hasIssue = item.statusType === 'warning';
 
@@ -717,8 +777,8 @@ function buildIssueHtml(section) {
       <div class="section-icon issue">⚠️</div>
       <div class="section-title">${section.title}</div>
     </div>
-    <div class="work-item" style="background: ${hasIssue ? '#ffebee' : '#e8f5e9'}; border-left: 4px solid ${hasIssue ? '#c62828' : '#2e7d32'};">
-      <div class="work-item-content" style="font-size: 14px; font-weight: 500;">
+    <div class="work-item" style="background: ${hasIssue ? '#ffebee' : '#e8f5e9'}; border-left: 4px solid ${hasIssue ? '#c62828' : '#2e7d32'}; padding: 16px 20px;">
+      <div class="work-item-content" style="font-size: 14px; line-height: 1.8;">
         ${item.name === '无' ? '✓ 今日无协调事项，工作正常' : item.name}
       </div>
     </div>
