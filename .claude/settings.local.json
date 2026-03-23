@@ -48,7 +48,10 @@
       "Skill(ytb)",
       "Skill(update-config)",
       "Bash(python3 -c \"import json; json.load\\(open\\(''/home/jinlong/.claude/settings.json''\\)\\)\")",
-      "Bash(echo $PATH)"
+      "Bash(echo $PATH)",
+      "Bash(git stash:*)",
+      "Bash(git pull:*)",
+      "Bash(git reset:*)"
     ]
   }
 }
