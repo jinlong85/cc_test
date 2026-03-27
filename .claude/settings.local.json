@@ -51,7 +51,8 @@
       "Bash(echo $PATH)",
       "Bash(git stash:*)",
       "Bash(git pull:*)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(crontab:*)"
     ]
   }
 }
