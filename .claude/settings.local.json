@@ -65,7 +65,8 @@
       "Read(//mnt/e/Download/图片助手\\(ImageAssistant\\)_批量图片下载器/2026-02-12/Vanessa_Flickr/**)",
       "Read(//mnt/d/Download/图片助手\\(ImageAssistant\\)_批量图片下载器/2026-02-12/Vanessa_Flickr/**)",
       "Read(//mnt/**)",
-      "Bash(PATH=$PATH:~/bin MINIMAX_API_HOST=\"https://api.minimaxi.com\" MINIMAX_API_KEY=\"sk-cp-ej1PU2s2eXtmlfQFpNgihxPWlhsOdjQCosbYToomWeuPNuCvgdRy74a8IKLB7LCoXhlgOqLH11n-nyIqnJ7JKqOSnQXKfS2DZ5sKwVHL4KiBwR9OKHa00JQ\" bash:*)"
+      "Bash(PATH=$PATH:~/bin MINIMAX_API_HOST=\"https://api.minimaxi.com\" MINIMAX_API_KEY=\"sk-cp-ej1PU2s2eXtmlfQFpNgihxPWlhsOdjQCosbYToomWeuPNuCvgdRy74a8IKLB7LCoXhlgOqLH11n-nyIqnJ7JKqOSnQXKfS2DZ5sKwVHL4KiBwR9OKHa00JQ\" bash:*)",
+      "Bash(base64:*)"
     ]
   }
 }
