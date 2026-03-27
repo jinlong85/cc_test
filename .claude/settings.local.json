@@ -53,7 +53,9 @@
       "Bash(git pull:*)",
       "Bash(git reset:*)",
       "Bash(crontab:*)",
-      "Bash(claude plugin:*)"
+      "Bash(claude plugin:*)",
+      "Bash(claude:*)",
+      "Bash(bash:*)"
     ]
   }
 }
