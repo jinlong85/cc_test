@@ -55,7 +55,10 @@
       "Bash(crontab:*)",
       "Bash(claude plugin:*)",
       "Bash(claude:*)",
-      "Bash(bash:*)"
+      "Bash(bash:*)",
+      "Bash(sudo apt-get:*)",
+      "Bash(apt list:*)",
+      "Bash(curl:*)"
     ]
   }
 }
